@@ -3,6 +3,7 @@
  *
  * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#action
  */
+// 浏览器行为枚举，浏览器第一次打开时状态都为 pop
 export enum Action {
   /**
    * A POP indicates a change to an arbitrary index in the history stack, such
@@ -125,6 +126,7 @@ export type PartialPath = Partial<Path>;
  */
 export type PartialLocation = Partial<Location>;
 
+// 一次更新的抽象表示，包含有更新的行为和 location 对象
 /**
  * A change to the current location.
  */
@@ -140,6 +142,7 @@ export interface Update {
   location: Location;
 }
 
+// 监听对象
 /**
  * A function that receives notifications about location changes.
  */
@@ -147,6 +150,7 @@ export interface Listener {
   (update: Update): void;
 }
 
+// 如果阻止了页面跳转（blocker 监听），可以使用 retry 重新进入页面
 /**
  * A change to the current location that was blocked. May be retried
  * after obtaining user confirmation.
@@ -160,6 +164,7 @@ export interface Transition extends Update {
 
 /**
  * A function that receives transitions when navigation is blocked.
+ * 页面跳转失败后拿到的 Transition 对象
  */
 export interface Blocker {
   (tx: Transition): void;
@@ -180,13 +185,15 @@ export type To = string | PartialPath;
  * It is similar to the DOM's `window.history` object, but with a smaller, more
  * focused API.
  */
+// history 对象
 export interface History {
   /**
    * The last action that modified the current location. This will always be
-   * Action.Pop when a history instance is first created. This value is mutable.
+   * Actin
    *
    * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.action
    */
+  // 最后一次浏览器跳转的行为，可变
   readonly action: Action;
 
   /**
@@ -194,6 +201,7 @@ export interface History {
    *
    * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.location
    */
+  // 挂载有当前的 location 可变
   readonly location: Location;
 
   /**
@@ -204,6 +212,7 @@ export interface History {
    *
    * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.createHref
    */
+  // 工具方法，把 to 对象转化为 url 字符串
   createHref(to: To): string;
 
   /**
@@ -259,7 +268,7 @@ export interface History {
   /**
    * Sets up a listener that will be called whenever the current location
    * changes.
-   *
+   * 页面跳转后触发，相当于后置钩子
    * @param listener - A function that will be called when the location changes
    * @returns unlisten - A function that may be used to stop listening
    *
@@ -270,7 +279,7 @@ export interface History {
   /**
    * Prevents the current location from changing and sets up a listener that
    * will be called instead.
-   *
+   * 也是监听器，但是会阻止页面跳转，相当于前置钩子
    * @param blocker - A function that will be called when a transition is blocked
    * @returns unblock - A function that may be used to stop blocking
    *
@@ -308,10 +317,14 @@ export interface HashHistory extends History {}
  *
  * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#memoryhistory
  */
+// 保存在内存中的 history，全环境通用，也就是自定义的历史栈
 export interface MemoryHistory extends History {
   index: number;
 }
 
+/**
+ * 冻结对象，但是只在开发模式下触发
+ */
 const readOnly: <T extends unknown>(obj: T) => T = __DEV__
   ? (obj) => Object.freeze(obj)
   : (obj) => obj;
@@ -343,6 +356,7 @@ type HistoryState = {
   idx: number;
 };
 
+// 监听事件
 const BeforeUnloadEventType = 'beforeunload';
 const HashChangeEventType = 'hashchange';
 const PopStateEventType = 'popstate';
@@ -362,8 +376,12 @@ export function createBrowserHistory(
   let { window = document.defaultView! } = options;
   let globalHistory = window.history;
 
+  /**
+   * 拿到当前的 state 的 idx 和 location 对象
+   */
   function getIndexAndLocation(): [number, Location] {
     let { pathname, search, hash } = window.location;
+    // 自定义的 state
     let state = globalHistory.state || {};
     return [
       state.idx,
@@ -378,6 +396,9 @@ export function createBrowserHistory(
   }
 
   let blockedPopTx: Transition | null = null;
+  /**
+   * 如果设置了 blocker 的监听器，该函数会执行两次，第一次是跳回到原来的页面，第二次是执行 blockers 的所有回调
+   */
   function handlePop() {
     if (blockedPopTx) {
       blockers.call(blockedPopTx);
@@ -386,22 +407,26 @@ export function createBrowserHistory(
       let nextAction = Action.Pop;
       let [nextIndex, nextLocation] = getIndexAndLocation();
 
+      // 如果有前置钩子
       if (blockers.length) {
         if (nextIndex != null) {
+          // 计算跳转层数
           let delta = index - nextIndex;
           if (delta) {
             // Revert the POP
             blockedPopTx = {
               action: nextAction,
               location: nextLocation,
+              // 恢复页面栈，也就是 nextIndex 的页面栈
               retry() {
                 go(delta * -1);
               }
             };
-
+            // 跳转回去（index 原本的页面栈）
             go(delta);
           }
         } else {
+          // asset
           // Trying to POP to a location with no index. We did not create
           // this location, so we can't effectively block the navigation.
           warning(
@@ -417,6 +442,7 @@ export function createBrowserHistory(
           );
         }
       } else {
+        // 改变当前 action，调用所有的 listener
         applyTx(nextAction);
       }
     }
@@ -424,16 +450,28 @@ export function createBrowserHistory(
 
   window.addEventListener(PopStateEventType, handlePop);
 
+  /**
+   * 当前 action
+   */
   let action = Action.Pop;
   let [index, location] = getIndexAndLocation();
+  /**
+   * 当前 listen 发布订阅模型
+   */
   let listeners = createEvents<Listener>();
+  /**
+   * 当前 blocker 发布订阅模型
+   */
   let blockers = createEvents<Blocker>();
 
+  // 初始化 index
   if (index == null) {
     index = 0;
     globalHistory.replaceState({ ...globalHistory.state, idx: index }, '');
   }
-
+  /**
+   * createPath 的封装，会判断 to 是否为字符串
+   */
   function createHref(to: To) {
     return typeof to === 'string' ? to : createPath(to);
   }
@@ -464,12 +502,17 @@ export function createBrowserHistory(
     ];
   }
 
+  /**
+   * 调用所有 blockers，没有 blocker 的监听时才会返回 true，否则都是返回 false
+   */
   function allowTx(action: Action, location: Location, retry: () => void) {
     return (
       !blockers.length || (blockers.call({ action, location, retry }), false)
     );
   }
-
+  /**
+   * 改变当前 action，调用所有的 listener
+   */
   function applyTx(nextAction: Action) {
     action = nextAction;
     [index, location] = getIndexAndLocation();
@@ -479,6 +522,10 @@ export function createBrowserHistory(
   function push(to: To, state?: any) {
     let nextAction = Action.Push;
     let nextLocation = getNextLocation(to, state);
+
+    /**
+     * 重新执行 push 操作
+     */
     function retry() {
       push(to, state);
     }
@@ -491,6 +538,7 @@ export function createBrowserHistory(
       try {
         globalHistory.pushState(historyState, '', url);
       } catch (error) {
+        // push 失败后就没有 state 了，页面刷新
         // They are going to lose state here, but there is no real
         // way to warn them about it since the page will refresh...
         window.location.assign(url);
@@ -517,6 +565,9 @@ export function createBrowserHistory(
     }
   }
 
+  /**
+   * 就是 history 对象的 go 方法
+   */
   function go(delta: number) {
     globalHistory.go(delta);
   }
@@ -544,6 +595,7 @@ export function createBrowserHistory(
     block(blocker) {
       let unblock = blockers.push(blocker);
 
+      // 当我们需要监听跳转失败时才加入，并且只需要一个事件来阻止页面关闭
       if (blockers.length === 1) {
         window.addEventListener(BeforeUnloadEventType, promptBeforeUnload);
       }
@@ -585,6 +637,7 @@ export function createHashHistory(
   let globalHistory = window.history;
 
   function getIndexAndLocation(): [number, Location] {
+    // 注意这里和 browserHistory 不同了
     let {
       pathname = '/',
       search = '',
@@ -650,6 +703,7 @@ export function createHashHistory(
 
   window.addEventListener(PopStateEventType, handlePop);
 
+  // 低版本兼容，监听 hashchange 事件
   // popstate does not fire on hashchange in IE 11 and old (trident) Edge
   // https://developer.mozilla.org/de/docs/Web/API/Window/popstate_event
   window.addEventListener(HashChangeEventType, () => {
@@ -999,10 +1053,16 @@ export function createMemoryHistory(
 // UTILS
 ////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * 判断上下限
+ */
 function clamp(n: number, lowerBound: number, upperBound: number) {
   return Math.min(Math.max(n, lowerBound), upperBound);
 }
 
+/**
+ * 阻止 reload 页面，这个在源码中只监听了一次
+ */
 function promptBeforeUnload(event: BeforeUnloadEvent) {
   // Cancel the event.
   event.preventDefault();
@@ -1010,12 +1070,18 @@ function promptBeforeUnload(event: BeforeUnloadEvent) {
   event.returnValue = '';
 }
 
+/**
+ * 事件对象
+ */
 type Events<F> = {
   length: number;
   push: (fn: F) => () => void;
   call: (arg: any) => void;
 };
 
+/**
+ * 内置的发布订阅事件模型
+ */
 function createEvents<F extends Function>(): Events<F> {
   let handlers: F[] = [];
 
@@ -1023,6 +1089,7 @@ function createEvents<F extends Function>(): Events<F> {
     get length() {
       return handlers.length;
     },
+    // push 时返回对应的 clear 语句
     push(fn: F) {
       handlers.push(fn);
       return function () {
@@ -1035,13 +1102,16 @@ function createEvents<F extends Function>(): Events<F> {
   };
 }
 
+/**
+ * 创建 uuid
+ */
 function createKey() {
   return Math.random().toString(36).substr(2, 8);
 }
 
 /**
  * Creates a string URL path from the given pathname, search, and hash components.
- *
+ *  pathname + search + hash 创建完整 url
  * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#createpath
  */
 export function createPath({
@@ -1054,7 +1124,7 @@ export function createPath({
 
 /**
  * Parses a string URL path into its separate pathname, search, and hash components.
- *
+ * 解析 url
  * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#parsepath
  */
 export function parsePath(path: string): PartialPath {
