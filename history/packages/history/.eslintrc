@@ -1,0 +1,10 @@
+{
+  "env": {
+    "browser": true,
+    "es6": true,
+    "node": false
+  },
+  "globals": {
+    "__DEV__": true
+  }
+}

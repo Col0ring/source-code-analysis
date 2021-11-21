@@ -1,0 +1,17 @@
+npm-debug.log
+
+/build/
+/docs/api/
+/website/build/
+node_modules/
+
+/examples/*/yarn.lock
+/examples/*/dist
+/tutorial/dist
+
+# v5 build files
+/packages/*/cjs/
+/packages/*/esm/
+/packages/*/umd/
+
+.eslintcache
