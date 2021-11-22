@@ -1,3 +1,5 @@
+// 总结：整体是对浏览器 api 的二次封装，但是并没有太过深入的封装，仅仅是对每次页面跳转时做了抽象处理，并且在每次跳转前和跳转时附加了统一的监听功能
+
 /**
  * Actions represent the type of change to a location value.
  *
@@ -279,7 +281,7 @@ export interface History {
   /**
    * Prevents the current location from changing and sets up a listener that
    * will be called instead.
-   * 也是监听器，但是会阻止页面跳转，相当于前置钩子
+   * 也是监听器，但是会阻止页面跳转，相当于前置钩子，注意只能拦截当前 history 对象的钩子，也就是说如果 history 对象不同，是不能够拦截到的
    * @param blocker - A function that will be called when a transition is blocked
    * @returns unblock - A function that may be used to stop blocking
    *
@@ -398,6 +400,7 @@ export function createBrowserHistory(
   let blockedPopTx: Transition | null = null;
   /**
    * 如果设置了 blocker 的监听器，该函数会执行两次，第一次是跳回到原来的页面，第二次是执行 blockers 的所有回调
+   * 这个函数用于监听浏览器的前进后退，因为我们封装的 push 函数已经被我们拦截了
    */
   function handlePop() {
     if (blockedPopTx) {
@@ -530,6 +533,16 @@ export function createBrowserHistory(
       push(to, state);
     }
 
+    // 如果有 block 监听存在这里会一直不进行，所以需要在监听完成一次后把监听取消了
+    /**
+     * @example```
+     * const unblock = history.block((blocker) => {
+     *    // 必须要取消 block 的监听才能 retry 成功
+     *    unblock()
+     *    blocker.retry()
+     * })
+     * ```
+     */
     if (allowTx(nextAction, nextLocation, retry)) {
       let [historyState, url] = getHistoryStateAndUrl(nextLocation, index + 1);
 
@@ -555,6 +568,7 @@ export function createBrowserHistory(
       replace(to, state);
     }
 
+    // 同 push 函数
     if (allowTx(nextAction, nextLocation, retry)) {
       let [historyState, url] = getHistoryStateAndUrl(nextLocation, index);
 
@@ -637,7 +651,7 @@ export function createHashHistory(
   let globalHistory = window.history;
 
   function getIndexAndLocation(): [number, Location] {
-    // 注意这里和 browserHistory 不同了
+    // 注意这里和 browserHistory 不同了，拿的是 hash，其余逻辑是一样的
     let {
       pathname = '/',
       search = '',
@@ -725,6 +739,9 @@ export function createHashHistory(
     globalHistory.replaceState({ ...globalHistory.state, idx: index }, '');
   }
 
+  /**
+   * 查看是否有 base 标签，如果有则取 base 的 url（不是从 base 标签获取，是从 window.location.href 获取）
+   */
   function getBaseHref() {
     let base = document.querySelector('base');
     let href = '';
@@ -732,12 +749,16 @@ export function createHashHistory(
     if (base && base.getAttribute('href')) {
       let url = window.location.href;
       let hashIndex = url.indexOf('#');
+      // 拿到去除了 # 的 url
       href = hashIndex === -1 ? url : url.slice(0, hashIndex);
     }
 
     return href;
   }
 
+  /**
+   * HashRouter 的路径是前缀加了 # 的
+   */
   function createHref(to: To) {
     return getBaseHref() + '#' + (typeof to === 'string' ? to : createPath(to));
   }
@@ -892,20 +913,23 @@ export function createHashHistory(
 export type InitialEntry = string | PartialLocation;
 
 export type MemoryHistoryOptions = {
+  // 初始化的用户栈，默认浏览器的历史栈
   initialEntries?: InitialEntry[];
+  // 初始化的 index
   initialIndex?: number;
 };
 
 /**
  * Memory history stores the current location in memory. It is designed for use
  * in stateful non-browser environments like tests and React Native.
- *
+ * 特殊的路由，通过内存存储页面栈，这里传入的参数也和 browser 和 hash router 不同，因为不是真实的路由，所以不需要 window 对象
  * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#creatememoryhistory
  */
 export function createMemoryHistory(
   options: MemoryHistoryOptions = {}
 ): MemoryHistory {
   let { initialEntries = ['/'], initialIndex } = options;
+  // 初始化传入的 location 栈，模拟的
   let entries: Location[] = initialEntries.map((entry) => {
     let location = readOnly<Location>({
       pathname: '/',
@@ -925,6 +949,7 @@ export function createMemoryHistory(
 
     return location;
   });
+  // 取上下限，如果 没有传 initialIndex 默认索引为最后一个 location
   let index = clamp(
     initialIndex == null ? entries.length - 1 : initialIndex,
     0,
@@ -958,6 +983,7 @@ export function createMemoryHistory(
   }
 
   function applyTx(nextAction: Action, nextLocation: Location) {
+    // 没有在这里改变 index ，和其余 router 不同，将 index 改变操作具体到了 push 和 go 等函数中
     action = nextAction;
     location = nextLocation;
     listeners.call({ action, location });
@@ -979,6 +1005,7 @@ export function createMemoryHistory(
 
     if (allowTx(nextAction, nextLocation, retry)) {
       index += 1;
+      // 添加一个新的 location，删除原来 index 往后的栈堆
       entries.splice(index, entries.length, nextLocation);
       applyTx(nextAction, nextLocation);
     }
@@ -999,12 +1026,14 @@ export function createMemoryHistory(
     );
 
     if (allowTx(nextAction, nextLocation, retry)) {
+      // 覆盖掉原来的 location
       entries[index] = nextLocation;
       applyTx(nextAction, nextLocation);
     }
   }
 
   function go(delta: number) {
+    // 跳转到原来的 location
     let nextIndex = clamp(index + delta, 0, entries.length - 1);
     let nextAction = Action.Pop;
     let nextLocation = entries[nextIndex];
@@ -1041,6 +1070,7 @@ export function createMemoryHistory(
     listen(listener) {
       return listeners.push(listener);
     },
+    // 这里就没有监听浏览器的 unload 了
     block(blocker) {
       return blockers.push(blocker);
     }
