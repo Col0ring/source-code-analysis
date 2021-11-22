@@ -1,3 +1,9 @@
+/**
+ * 总结：最重要的 api 是 useRoutes，Route 组件实际上只是提供 route 属性的工具而已，Routes 组件实际上内部只是对 useRoutes 的参数做一层转换，转换完成后可以得到一个 routes 数组（也可以直接使用 useRoutes 手动传入）。
+ * useRoutes 内部会将传入的 routes 与当前的 location（可手动传入，但内部会做校验）做一层匹配，通过对 route 中声明的 path 的权重计算（在 route 中加入 index 属性实际上是为了增加权重，但是该权重并不大，如果有确定的路由路径就不会匹配上 indexRoute），拿到当前 pathname 所能匹配到的最佳 matches 数组，该数组为扁平化，索引从小到大级别关系从大到小，最大是根 route 所对应的 match，最小是当前 pathname 匹配最多的 route 所对应的 match。
+ * 然后将 matches 数组渲染为一个聚合的 React Element，该元素整体是许多 RouteContext.Provider 的嵌套，从外到内依次是父 => 子 => 孙子这样的关系，每个 Provider 包含两个值，与该级别对应的 matches 数组（最后的元素时该级别的 route 自身）与 outlet 元素，outlet 元素就是嵌套的 RouteContext.Provider 存放的地方，每个 RouteContext.Provider 的 children 就是 route 的 element 属性。
+ * 每次使用 outlet 实际上都是渲染的内置的路由关系（如果当前 route 没有 element 属性，则默认渲染 outlet，这也是为什么可以直接 <Route/> 组件嵌套的原因），我们可以在当前级别 route 的 element 中任意地方使用 outlet 来渲染子路由。
+ */
 import * as React from "react";
 import type {
   History,
@@ -592,7 +598,9 @@ export function useResolvedPath(to: To): Path {
  * with the correct context to render the remainder of the route tree. Route
  * elements in the tree must render an <Outlet> to render their child route's
  * element.
- * 该 hooks 不是只调用一次，每次重新匹配到路由时就会重新调用渲染新的 element
+ * 1.该 hooks 不是只调用一次，每次重新匹配到路由时就会重新调用渲染新的 element
+ * 2.当多次调用 useRoutes 时需要解决内置内置的 route 上下文问题，继承外层的匹配结果
+ * 3.内部通过计算所有的 routes 与当前的 location 关系，经过路径权重计算，得到 matches 数组，然后将 matches 数组重新渲染为嵌套结构的组件
  * @see https://reactrouter.com/docs/en/v6/api#useroutes
  */
 export function useRoutes(
@@ -606,16 +614,14 @@ export function useRoutes(
     `useRoutes() may be used only in the context of a <Router> component.`
   );
 
+  // 当该 hooks 在一个已经调用了 useRoutes 的渲染对象中渲染时，matches 或有值，也就是 Routes 的嵌套
   let { matches: parentMatches } = React.useContext(RouteContext);
-  // 最后 match 到的 route（深度最深）
+  // 最后 match 到的 route（深度最深），该 route 将作为父 route，我们后续的 routes 都是其子级
   let routeMatch = parentMatches[parentMatches.length - 1];
-  // params
+  // 下面是父级 route 的参数，我们会基于以下参数操作
   let parentParams = routeMatch ? routeMatch.params : {};
-  // pathname
   let parentPathname = routeMatch ? routeMatch.pathname : "/";
-  // pathnameBase
   let parentPathnameBase = routeMatch ? routeMatch.pathnameBase : "/";
-  // route
   let parentRoute = routeMatch && routeMatch.route;
 
   if (__DEV__) {
@@ -639,9 +645,11 @@ export function useRoutes(
     //     </Routes>
     //   );
     // }
+
     let parentPath = (parentRoute && parentRoute.path) || "";
     warningOnce(
       parentPathname,
+      // 如果有父级的 route（在一个已有 RouteProvider 的环境中），path 必须以 * 结尾
       !parentRoute || parentPath.endsWith("*"),
       `You rendered descendant <Routes> (or called \`useRoutes()\`) at ` +
         `"${parentPathname}" (under <Route path="${parentPath}">) but the ` +
@@ -660,7 +668,7 @@ export function useRoutes(
   if (locationArg) {
     let parsedLocationArg =
       typeof locationArg === "string" ? parsePath(locationArg) : locationArg;
-    // 如果传入了 location，判断是否与父级路由匹配（父路由的子路由）
+    // 如果传入了 location，判断是否与父级路由匹配（作为子路由存在）
     invariant(
       parentPathnameBase === "/" ||
         parsedLocationArg.pathname?.startsWith(parentPathnameBase),
@@ -676,19 +684,22 @@ export function useRoutes(
   }
 
   let pathname = location.pathname || "/";
-  // 从完整路径获取对应的子 pathname，与 Route 中的 path 相对应
+  // 剩余的 pathname，减掉父级的 pathname，才是本次 routes 要匹配的 pathname
   let remainingPathname =
     parentPathnameBase === "/"
       ? pathname
       : pathname.slice(parentPathnameBase.length) || "/";
+  // 匹配当前路径，需要移除父 parentPathname 的相关路径
   let matches = matchRoutes(routes, { pathname: remainingPathname });
 
   if (__DEV__) {
+    // 父 Routes 没有匹配到并且当前 Routes 没有匹配到 location
     warning(
       parentRoute || matches != null,
       `No routes matched location "${location.pathname}${location.search}${location.hash}" `
     );
 
+    // 没有对应的 element
     warning(
       matches == null ||
         matches[matches.length - 1].route.element !== undefined,
@@ -699,6 +710,7 @@ export function useRoutes(
 
   // 返回的是 React.Element，渲染所有的 matches 对象
   return _renderMatches(
+    // 没有 matches 会返回 null
     matches &&
       matches.map(match =>
         // 合并父 Route 的参数，子 Route 会有父 Route 的所有匹配属性
@@ -835,7 +847,7 @@ export interface RouteMatch<ParamKey extends string = string> {
 
 /**
  * Matches the given routes to a location and returns the match data.
- * 得到 matches 数组
+ * 通过 routes 与 location 得到 matches 数组
  * @see https://reactrouter.com/docs/en/v6/api#matchroutes
  */
 export function matchRoutes(
@@ -848,17 +860,23 @@ export function matchRoutes(
   let location =
     typeof locationArg === "string" ? parsePath(locationArg) : locationArg;
 
+  // 纯粹的 pathname
   let pathname = stripBasename(location.pathname || "/", basename);
 
   if (pathname == null) {
     return null;
   }
 
+  // 扁平化 routes
   let branches = flattenRoutes(routes);
+  // 根据匹配到的权重排序
   rankRouteBranches(branches);
 
   let matches = null;
+  // 这里就是权重比较完成后的解析顺序，权重高的在前面，先进行匹配，然后是权重低的匹配
+  // branches 中有一个匹配到了就终止循环，或者全都没有匹配到
   for (let i = 0; matches == null && i < branches.length; ++i) {
+    // 遍历扁平化的 routes，查看每个 branch 的路径匹配规则
     matches = matchRouteBranch(branches[i], routes, pathname);
   }
 
@@ -866,17 +884,40 @@ export function matchRoutes(
 }
 
 interface RouteMeta {
+  /**
+   * 相对路径
+   */
   relativePath: string;
   caseSensitive: boolean;
+  /**
+   * 用户在 routes 数组中的索引位置（相对其兄弟 route 而言）
+   */
   childrenIndex: number;
 }
 
 interface RouteBranch {
+  /**
+   * 完整的 path
+   */
   path: string;
+  /**
+   * 权重，用于排序
+   */
   score: number;
+  /**
+   * 路径 meta，依次为从父级到子级的路径规则，最后一个是路由自己
+   */
   routesMeta: RouteMeta[];
 }
 
+/**
+ * 扁平化路由，会将所有路由扁平为一个数组，用于比较权重
+ * @param routes 第一次调用只需要传入该值，用于转换的 routes 数组
+ * @param branches
+ * @param parentsMeta
+ * @param parentPath
+ * @returns
+ */
 function flattenRoutes(
   routes: RouteObject[],
   branches: RouteBranch[] = [],
@@ -884,12 +925,16 @@ function flattenRoutes(
   parentPath = ""
 ): RouteBranch[] {
   routes.forEach((route, index) => {
+    // 当前 branch 管理的 route meta
     let meta: RouteMeta = {
+      // 只保存相对路径，下面会进行处理
       relativePath: route.path || "",
       caseSensitive: route.caseSensitive === true,
+      // index 是用户给出的 routes 顺序，会一定程度影响 branch 的排序（当为同一层级 route 时）
       childrenIndex: index
     };
 
+    // 如果 route 以 / 开头，那么它应该完全包含父 route 的 path
     if (meta.relativePath.startsWith("/")) {
       invariant(
         meta.relativePath.startsWith(parentPath),
@@ -898,16 +943,21 @@ function flattenRoutes(
           `must start with the combined path of all its parent routes.`
       );
 
+      // 只要相对路径
       meta.relativePath = meta.relativePath.slice(parentPath.length);
     }
 
+    // 完整的 path
     let path = joinPaths([parentPath, meta.relativePath]);
+    // 将自己的 meta 进行推入
     let routesMeta = parentsMeta.concat(meta);
 
     // Add the children before adding this route to the array so we traverse the
     // route tree depth-first and child routes appear before their parents in
     // the "flattened" version.
+    // 递归
     if (route.children && route.children.length > 0) {
+      // 如果是 index route，报错，因为 index route 不能有 children
       invariant(
         route.index !== true,
         `Index routes must not have child routes. Please remove ` +
@@ -919,27 +969,38 @@ function flattenRoutes(
 
     // Routes without a path shouldn't ever match by themselves unless they are
     // index routes, so don't add them to the list of possible branches.
+    // 没有路径的路由不参与 match，除非它是 index route
     if (route.path == null && !route.index) {
       return;
     }
 
+    // routesMeta，包含父 route 到自己的全部 meta 信息
     branches.push({ path, score: computeScore(path, route.index), routesMeta });
   });
 
   return branches;
 }
 
+/**
+ * 排序，比较权重值
+ * @param branches
+ */
 function rankRouteBranches(branches: RouteBranch[]): void {
   branches.sort((a, b) =>
     a.score !== b.score
       ? b.score - a.score // Higher score first
-      : compareIndexes(
+      : // 如果 a.score === b.score
+        compareIndexes(
+          // childrenIndex 是按照 routes 中 route 传入的顺序传值的
           a.routesMeta.map(meta => meta.childrenIndex),
           b.routesMeta.map(meta => meta.childrenIndex)
         )
   );
 }
 
+/**
+ * 单位权重
+ */
 const paramRe = /^:\w+$/;
 const dynamicSegmentValue = 3;
 const indexRouteValue = 2;
@@ -948,33 +1009,56 @@ const staticSegmentValue = 10;
 const splatPenalty = -2;
 const isSplat = (s: string) => s === "*";
 
+/**
+ * 计算路由权值，根据权值大小匹配路由
+ * 静态值 > params 动态参数
+ * @param path
+ * @param index
+ * @returns
+ */
 function computeScore(path: string, index: boolean | undefined): number {
   let segments = path.split("/");
+  // 初始化权重
   let initialScore = segments.length;
+  // 有一个 * 权重减 2
   if (segments.some(isSplat)) {
     initialScore += splatPenalty;
   }
 
+  // 用户传了 index，index 是布尔值，代表 IndexRouter，权重 +2
   if (index) {
     initialScore += indexRouteValue;
   }
 
+  // 在过滤出非 * 的部分
   return segments
     .filter(s => !isSplat(s))
     .reduce(
       (score, segment) =>
         score +
+        // 如果有动态参数
         (paramRe.test(segment)
-          ? dynamicSegmentValue
+          ? // 动态参数权重 3
+            dynamicSegmentValue
           : segment === ""
-          ? emptySegmentValue
-          : staticSegmentValue),
+          ? // 空值权重为 1，也就是两个 // 连着中间会多 1 的权重
+            emptySegmentValue
+          : // 静态值权重最高为 10
+            staticSegmentValue),
       initialScore
     );
 }
 
+/**
+ * 比较子 route 的 index，判断是否为兄弟 route，如果不是则返回 0，比较没有意义，不做任何操作
+ * @param a
+ * @param b
+ * @returns
+ */
 function compareIndexes(a: number[], b: number[]): number {
+  // 是否为兄弟 route
   let siblings =
+    // 这里是比较除了最后一个 route 的 path，需要全部一致才是兄弟 route
     a.length === b.length && a.slice(0, -1).every((n, i) => n === b[i]);
 
   return siblings
@@ -982,42 +1066,63 @@ function compareIndexes(a: number[], b: number[]): number {
       // first. This allows people to have fine-grained control over the matching
       // behavior by simply putting routes with identical paths in the order they
       // want them tried.
+      // 如果是兄弟节点，判断 route 的 index（可手动传入控制），否则简单按照索引顺序比较
       a[a.length - 1] - b[b.length - 1]
     : // Otherwise, it doesn't really make sense to rank non-siblings by index,
       // so they sort equally.
+      // 只比较兄弟节点，如果不是兄弟节点，则权重相同
       0;
 }
 
+/**
+ * 通过 branch 和当前的 pathname 得到真正的 matches 数组
+ * @param branch
+ * @param routesArg
+ * @param pathname
+ * @returns
+ */
 function matchRouteBranch<ParamKey extends string = string>(
   branch: RouteBranch,
+  // 这里后续貌似会更改，将这个参数放到 branch 的 routesMeta 中
   // TODO: attach original route object inside routesMeta so we don't need this arg
   routesArg: RouteObject[],
+  // 这里的 pathname 已经处理过 base 了，所以当做是普通的 pathname
   pathname: string
 ): RouteMatch<ParamKey>[] | null {
   let routes = routesArg;
   let { routesMeta } = branch;
 
+  // 初始化匹配到的值
   let matchedParams = {};
   let matchedPathname = "/";
   let matches: RouteMatch[] = [];
+  // 遍历 routesMeta 数组，最后一项是自己的 route，前面是 parentRoute
   for (let i = 0; i < routesMeta.length; ++i) {
     let meta = routesMeta[i];
+    // 是否为最后一个 route
     let end = i === routesMeta.length - 1;
+    // 剩余的路径名
     let remainingPathname =
       matchedPathname === "/"
         ? pathname
         : pathname.slice(matchedPathname.length) || "/";
+    // 使用的相对路径规则匹配剩余的值
     let match = matchPath(
+      // 所以默认在匹配时只有最后一个 route 的 end 才会是 true，其余都是 false
       { path: meta.relativePath, caseSensitive: meta.caseSensitive, end },
       remainingPathname
     );
 
+    // 没匹配上
     if (!match) return null;
 
+    // 匹配上了合并 params，注意这里是改变的 matchedParams，所以所有 route 的 params 都是同一个
     Object.assign(matchedParams, match.params);
 
+    // childrenIndex 和 route 的 index 一定是一一对应的，只有 branch 数量可能对应不上
     let route = routes[meta.childrenIndex];
 
+    // 匹配上了就把路径再补全
     matches.push({
       params: matchedParams,
       pathname: joinPaths([matchedPathname, match.pathname]),
@@ -1025,10 +1130,12 @@ function matchRouteBranch<ParamKey extends string = string>(
       route
     });
 
+    // 不是第一级的路由了，更改 matchedPathname，用作后续子 route 的循环
     if (match.pathnameBase !== "/") {
       matchedPathname = joinPaths([matchedPathname, match.pathnameBase]);
     }
 
+    // routes 更新为所有子 route
     routes = route.children!;
   }
 
@@ -1054,11 +1161,15 @@ function _renderMatches(
 ): React.ReactElement | null {
   if (matches == null) return null;
 
-  // 生成 outlet 组件
+  // 生成 outlet 组件，主要这里是从后往前 reduce，所有最前面的是最外层
+  /**
+   *  可以看到 outlet 是通过不断递归生成的组件，最外层的 outlet 递归层数最多，包含有所有的内层组件，
+   *  所以我们在外层使用的 <Outlet /> 是包含有所有子组件的聚合组件
+   * */
   return matches.reduceRight((outlet, match, index) => {
     return (
       <RouteContext.Provider
-        // 如果没有填写 element，则默认是 <Outlet />，继续渲染内嵌的 <Route />
+        // 如果有 element 就渲染 element，如果没有填写 element，则默认是 <Outlet />，继续渲染内嵌的 <Route />
         children={
           match.route.element !== undefined ? match.route.element : <Outlet />
         }
