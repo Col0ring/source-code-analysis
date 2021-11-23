@@ -1,3 +1,6 @@
+/**
+ * 总结：基于 react-router 的 memoryRouter 做的一层深入封装，同时依赖着 react-native 的相关 api，并提供了一些可在原生应用中快速操作的 hook 与 组件。
+ */
 import * as React from "react";
 import {
   BackHandler,
@@ -116,6 +119,7 @@ export {
 export interface NativeRouterProps extends MemoryRouterProps {}
 
 /**
+ * NativeRouter 就是 react-router 里的 MemoryRouter，使用内存做导航
  * A <Router> that runs on React Native.
  */
 export function NativeRouter(props: NativeRouterProps) {
@@ -131,6 +135,7 @@ export interface LinkProps extends TouchableHighlightProps {
 }
 
 /**
+ * 基本同 react-router-dom 一样的组件封装，不过是使用的 react-native 的组件
  * A <TouchableHighlight> that navigates to a different URL when touched.
  */
 export function Link({
@@ -159,6 +164,7 @@ const HardwareBackPressEventType = "hardwareBackPress";
 const URLEventType = "url";
 
 /**
+ * 返回 press 方法的 hook
  * Handles the press behavior for router `<Link>` components. This is useful if
  * you need to create custom `<Link>` components with the same press behavior we
  * use in our exported `<Link>`.
@@ -180,6 +186,7 @@ export function useLinkPressHandler(
 }
 
 /**
+ * 启用硬件后退按钮的支持，不过貌似没有啥作用，内部代码还没完成
  * Enables support for the hardware back button on Android.
  */
 export function useHardwareBackButton() {
@@ -212,6 +219,7 @@ export function useHardwareBackButton() {
 export { useHardwareBackButton as useAndroidBackButton };
 
 /**
+ * 启用深层链接模式，每个链接会被两次添加入栈
  * Enables deep linking, both on the initial app launch and for
  * subsequent incoming links.
  */
@@ -223,6 +231,7 @@ export function useDeepLinking() {
     let current = true;
 
     Linking.getInitialURL().then(url => {
+      // 让初始化的链接更深入
       if (current) {
         if (url) navigate(trimScheme(url));
       }
@@ -233,6 +242,7 @@ export function useDeepLinking() {
     };
   }, [navigate]);
 
+  // 监听 url 改变，改变后继续往同一个 url 跳转，让链接更深入
   // Listen for URL changes
   React.useEffect(() => {
     function handleURLChange(event: { url: string }) {
@@ -247,11 +257,17 @@ export function useDeepLinking() {
   }, [navigate]);
 }
 
+/**
+ * 去除掉协议内容
+ * @param url
+ * @returns
+ */
 function trimScheme(url: string) {
   return url.replace(/^.*?:\/\//, "");
 }
 
 /**
+ * 同 react-router-dom，但是不需要判断 URLSearchParams 是否存在，貌似 react-native 一定会提供
  * A convenient wrapper for accessing individual query parameters via the
  * URLSearchParams interface.
  */
