@@ -1,5 +1,6 @@
 /**
  * 服务器端，ssr 路由
+ * StaticRouter 实际上就是一个只提供参数传递，没有任何 navigator 操作的 Router
  */
 import * as React from "react";
 import { Action, Location, To, createPath, parsePath } from "history";
@@ -11,8 +12,8 @@ export interface StaticRouterProps {
   location: Partial<Location> | string;
 }
 
-// 没有任何操作，只是简单对 location 转换
 /**
+ * 没有任何操作，只是简单对 location 做验证，然后传入到 Router 中
  * A <Router> that may not transition to any other location. This is useful
  * on the server where there is no stateful UI.
  */

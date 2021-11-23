@@ -29,6 +29,7 @@ export default function App() {
   );
 }
 
+// 通过 url 传递 json 格式的参数
 /**
  * This custom hook is a wrapper around `useSearchParams()` that parses and
  * serializes the search param value using the JSURL library, which permits any

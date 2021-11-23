@@ -1,3 +1,7 @@
+/**
+ * 总结：结合 history 对 react-router 进行了上层封装，并提供了一些可在浏览器中快速操作的 hook 与 组件。
+ */
+// 引入 history 库（针对浏览器中的路由系统），并且暴露 react-router 中的相关方法
 import * as React from "react";
 import type { BrowserHistory, HashHistory } from "history";
 import { createBrowserHistory, createHashHistory, createPath } from "history";
@@ -124,10 +128,14 @@ export {
 export interface BrowserRouterProps {
   basename?: string;
   children?: React.ReactNode;
+  /**
+   * window 对象可自定义，因为不一定是当前页面的 window，如果不传在 history 库中就会使用 document.defaultView，也就是当前页面的 window
+   */
   window?: Window;
 }
 
 /**
+ * 在 Router 中传入了 history 的 createBrowserHistory 作为 navigator
  * A <Router> for use in web browsers. Provides the cleanest URLs.
  */
 export function BrowserRouter({
@@ -145,7 +153,7 @@ export function BrowserRouter({
     action: history.action,
     location: history.location
   });
-
+  // 简单对状态做监听，然后更新 location 与 action
   React.useLayoutEffect(() => history.listen(setState), [history]);
 
   return (
@@ -166,6 +174,7 @@ export interface HashRouterProps {
 }
 
 /**
+ * 在 Router 中传入了 history 的 createHashHistory 作为 navigator
  * A <Router> for use in web browsers. Stores the location in the hash
  * portion of the URL so it is not sent to the server.
  */
@@ -181,6 +190,7 @@ export function HashRouter({ basename, children, window }: HashRouterProps) {
     location: history.location
   });
 
+  // 简单对状态做监听，然后更新 location 与 action
   React.useLayoutEffect(() => history.listen(setState), [history]);
 
   return (
@@ -194,12 +204,20 @@ export function HashRouter({ basename, children, window }: HashRouterProps) {
   );
 }
 
+/**
+ * 用户是否有按下修辞符
+ * @param event
+ * @returns
+ */
 function isModifiedEvent(event: React.MouseEvent) {
   return !!(event.metaKey || event.altKey || event.ctrlKey || event.shiftKey);
 }
 
 export interface LinkProps
   extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, "href"> {
+  /**
+   * 真实的 a 标签跳转
+   */
   reloadDocument?: boolean;
   replace?: boolean;
   state?: any;
@@ -214,12 +232,15 @@ export const Link = React.forwardRef<HTMLAnchorElement, LinkProps>(
     { onClick, reloadDocument, replace = false, state, target, to, ...rest },
     ref
   ) {
+    // 完整的 href
     let href = useHref(to);
     let internalOnClick = useLinkClickHandler(to, { replace, state, target });
     function handleClick(
       event: React.MouseEvent<HTMLAnchorElement, MouseEvent>
     ) {
       if (onClick) onClick(event);
+      // 这里的 defaultPrevented 是用户在外部 preventDefault 后的情况，阻止了内部跳转，internalOnClick 中也有 preventDefault，但是是阻止外部跳转，进行内部跳转，意义是不同的。
+      // 如果带了 reloadDocument 证明走的不是内部的 history 跳转，而是真实的 a 标签跳转
       if (!event.defaultPrevented && !reloadDocument) {
         internalOnClick(event);
       }
@@ -243,8 +264,13 @@ if (__DEV__) {
 }
 
 export interface NavLinkProps extends Omit<LinkProps, "className" | "style"> {
+  /**
+   * 这里的 caseSensitive 是改变传入的 to 的 pathname 的大小写，主要用于 active 状态的计算
+   */
   caseSensitive?: boolean;
   className?: string | ((props: { isActive: boolean }) => string);
+  // end 为 true 时需要当前 pathname 与 to 的 pathname 完全匹配，否则不需要完全匹配，只要当前 pathname 完全包含 toPathname 并且使用 / 做分割
+  // /home 可以匹配 /home/home2，但是不能匹配 /home2，也就是说必须要只有 /home，或者有 /home/ 作为前缀
   end?: boolean;
   style?:
     | React.CSSProperties
@@ -272,11 +298,13 @@ export const NavLink = React.forwardRef<HTMLAnchorElement, NavLinkProps>(
 
     let locationPathname = location.pathname;
     let toPathname = path.pathname;
+    // 改变大小写
     if (!caseSensitive) {
       locationPathname = locationPathname.toLowerCase();
       toPathname = toPathname.toLowerCase();
     }
 
+    // 是否匹配当前 NavLink 对应的 pathname
     let isActive =
       locationPathname === toPathname ||
       (!end &&
@@ -289,6 +317,7 @@ export const NavLink = React.forwardRef<HTMLAnchorElement, NavLinkProps>(
     if (typeof classNameProp === "function") {
       className = classNameProp({ isActive });
     } else {
+      // 如果没有传函数，会多一个 active 的 class 作为状态
       // If the className prop is not a function, we use a default `active`
       // class for <NavLink />s that are active. In v5 `active` was the default
       // value for `activeClassName`, but we are removing that API and can still
@@ -324,6 +353,7 @@ if (__DEV__) {
 ////////////////////////////////////////////////////////////////////////////////
 
 /**
+ * 返回拦截了默认 a 标签跳转的 click 事件函数
  * Handles the click behavior for router `<Link>` components. This is useful if
  * you need to create custom `<Link>` components with the same click behavior we
  * use in our exported `<Link>`.
@@ -347,14 +377,19 @@ export function useLinkClickHandler<E extends Element = HTMLAnchorElement>(
   return React.useCallback(
     (event: React.MouseEvent<E, MouseEvent>) => {
       if (
+        // 必须是左键单击才触发
         event.button === 0 && // Ignore everything but left clicks
+        // 如果是 target 为 _blank 这种不受处理
         (!target || target === "_self") && // Let browser handle "target=_blank" etc.
+        // 如果用户按了修辞符也不触发
         !isModifiedEvent(event) // Ignore clicks with modifier keys
       ) {
+        // 阻止 a 标签默认跳转
         event.preventDefault();
 
         // If the URL hasn't changed, a regular <a> will do a replace instead of
         // a push, so do the same here.
+        // 如果用户指定了 replace 或者 pathname 没有发生改变
         let replace =
           !!replaceProp || createPath(location) === createPath(path);
 
@@ -370,6 +405,7 @@ export function useLinkClickHandler<E extends Element = HTMLAnchorElement>(
  * URLSearchParams interface.
  */
 export function useSearchParams(defaultInit?: URLSearchParamsInit) {
+  // 支持 URLSearchParams API
   warning(
     typeof URLSearchParams !== "undefined",
     `You cannot use the \`useSearchParams\` hook in a browser that does not ` +
@@ -382,12 +418,15 @@ export function useSearchParams(defaultInit?: URLSearchParamsInit) {
       `user.`
   );
 
+  // 保存着 URLSearchParams 对象，初始化的值
   let defaultSearchParamsRef = React.useRef(createSearchParams(defaultInit));
 
   let location = useLocation();
   let searchParams = React.useMemo(() => {
+    // 当前 location.search 对应的 params
     let searchParams = createSearchParams(location.search);
 
+    // 如果当前 params 有初始化的 key，不做任何处理，否则加上没有的 key
     for (let key of defaultSearchParamsRef.current.keys()) {
       if (!searchParams.has(key)) {
         defaultSearchParamsRef.current.getAll(key).forEach(value => {
@@ -400,6 +439,7 @@ export function useSearchParams(defaultInit?: URLSearchParamsInit) {
   }, [location.search]);
 
   let navigate = useNavigate();
+  // 实际是调用了一遍 navigate 的方法
   let setSearchParams = React.useCallback(
     (
       nextInit: URLSearchParamsInit,
@@ -423,7 +463,7 @@ export type URLSearchParamsInit =
 
 /**
  * Creates a URLSearchParams object using the given initializer.
- *
+ * 将 init 的值（拓展出的值）转换为标准的 URLSearchParams 对象，主要拓展了对象形式参数的转换
  * This is identical to `new URLSearchParams(init)` except it also
  * supports arrays as values in the object form of the initializer
  * instead of just strings. This is convenient when you need multiple
@@ -446,11 +486,13 @@ export function createSearchParams(
   init: URLSearchParamsInit = ""
 ): URLSearchParams {
   return new URLSearchParams(
+    // 前面两个都是 URLSearchParams 本身就可转换的
     typeof init === "string" ||
     Array.isArray(init) ||
     init instanceof URLSearchParams
       ? init
-      : Object.keys(init).reduce((memo, key) => {
+      : // init 为普通 key value 对象
+        Object.keys(init).reduce((memo, key) => {
           let value = init[key];
           return memo.concat(
             Array.isArray(value) ? value.map(v => [key, v]) : [[key, value]]

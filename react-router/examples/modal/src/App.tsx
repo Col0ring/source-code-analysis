@@ -53,6 +53,7 @@ export default function App() {
         the background page.
       </p>
 
+      {/* 保持原来的值，这传入的 backgroundLocation 是原来的 location */}
       <Routes location={state?.backgroundLocation || location}>
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
@@ -62,8 +63,10 @@ export default function App() {
         </Route>
       </Routes>
 
+      {/* 展示 Modal 框 */}
       {/* Show the modal when a `backgroundLocation` is set */}
       {state?.backgroundLocation && (
+        // 注意这里使用的是当前的 location
         <Routes>
           <Route path="/img/:id" element={<Modal />} />
         </Routes>

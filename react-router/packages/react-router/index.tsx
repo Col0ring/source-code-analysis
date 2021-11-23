@@ -1347,13 +1347,13 @@ function compilePath(
           // 下面是匹配 /xxx 和 /*（/出现 0 次或多次），下面两者有相互重叠的地方，后续官方应该会改吧，感觉怪怪的
           "(?:\\/(.+)|\\/*)$"; // Don't include the / in params["*"]
   } else {
-    // 如果最后没有以 * 结尾，则忽略末尾的 /，否则我们应该至少匹配到一个单次边界
+    // 如果最后没有以 * 结尾，则只是忽略末尾的 /，否则我们应该至少匹配到一个单次边界（兼容 end 为 true 的情况，还有更多其他的情况，比如 /home/ /home@，也就是匹配到的单词后的字符不能是 a-z、A-Z、0-9）
     regexpSource += end
       ? "\\/*$" // When matching to the end, ignore trailing slashes
       : // Otherwise, at least match a word boundary. This restricts parent
         // routes to matching only their own words and nothing more, e.g. parent
         // route "/home" should not match "/home2".
-        // 限制了父 routes 只能匹配到自己的单词
+        // 限制了父 routes 只能匹配到自己的单词，如果为 false，那么 /home 可以匹配 /home/home2，但是不能匹配 /home2，也就是说必须要只有 /home，或者有 /home/ 作为前缀
         // 匹配到单词边界
         "(?:\\b|$)";
   }
