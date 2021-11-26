@@ -1,0 +1,37 @@
+name: Tests
+
+on:
+  push:
+    branches: [master, 7.x]
+  pull_request:
+    branches: [master, 7.x]
+
+jobs:
+  build:
+    name: Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@v1
+        with:
+          node-version: 14.x
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: .yarn/cache
+          key: yarn-${{ hashFiles('yarn.lock') }}
+          restore-keys: yarn-
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Run test suite
+        run: yarn test
+
+      - name: Collect coverage
+        run: yarn coverage

@@ -1,0 +1,14 @@
+.DS_Store
+*.log
+node_modules
+dist
+lib
+es
+coverage
+types
+
+website/translated_docs
+website/build/
+website/node_modules
+website/.docusaurus/
+website/i18n/*
