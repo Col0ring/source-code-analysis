@@ -1,0 +1,24 @@
+{
+  "name": "dep-package",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "files": [
+    ".yalc",
+    ".dot/",
+    "dist/",
+    "src",
+    "folder/file.{txt,md}",
+    "folder2/nested/file.txt",
+    "root-file.txt"
+  ],
+  "dependencies": {
+    "ws-package": "workspace:*",
+    "ws-package-unresolvable": "workspace:*",
+    "ws-package-qualified": "workspace:^1.0.0",
+    "ws-package-minor-alias": "workspace:^",
+    "ws-package-patch-alias": "workspace:~",
+    "ws-package-unresolvable-minor-alias": "workspace:^",
+    "ws-package-unresolvable-patch-alias": "workspace:~"
+  }
+}
