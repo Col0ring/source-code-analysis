@@ -35,20 +35,30 @@ const publishFlags = [
 
 const cliCommand = values.myNameIs
 
+// 获取 yalc 命令版本
 const getVersionMessage = () => {
   const pkg = require(__dirname + '/../package.json')
   return pkg.version
 }
 
+// 控制台变色
 makeConsoleColored()
 
 // .yalcrc 配置信息
 const rcArgs = readRcConfig()
 
+// 如果 yalc --quiet，则不输出 console 信息
 if (process.argv.includes('--quiet') || rcArgs.quiet) {
   disabledConsoleOutput()
 }
 
+/**
+ *
+ * 重 argv 中获取所有关于 yalc 发布的信息，yalc 的发布是本地进行的，相当于本地开了一个 npm 仓库
+ * @param {*} argv
+ * @param {Partial<PublishPackageOptions>} [override={}]
+ * @return {*}  {PublishPackageOptions}
+ */
 const getPublishOptions = (
   argv: any,
   override: Partial<PublishPackageOptions> = {}

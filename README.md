@@ -13,7 +13,7 @@
     - v6.0.2：已完成
 - redux：用于 JavaScript 应用程序的可预测的状态容器（一个状态管理库）
   - v4.1.2：进行中
-- react-redux：将 redux 与 react 绑定的管方库
+- react-redux：将 redux 与 react 绑定的官方库
   - v7.2.5：进行中
 - yalc：一种可替代`yarn/npm link`更好的本地包开发流程工具。
   - v1.0.0-pre.53：进行中

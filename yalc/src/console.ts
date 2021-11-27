@@ -4,6 +4,18 @@ declare const console: any
 
 type Methods = { [M in string]: (...args: any) => void }
 
+/**
+ * 
+ * 覆盖原生 node 的 console 方法
+ * @param {{
+ *   output: (p: { method: string; args: any[]; oldMethods: Methods }) => void
+ *   methods: string[]
+ *   invokeOld?: boolean
+ * }} {
+ *   output, 重学的工厂函数，包含当前要修改的 method 名，传入参数，被覆盖的所有 console 原方法
+ *   methods, 需要重写的方法名
+ * } 
+ */
 const overloadConsole = ({
   output,
   methods,
@@ -24,6 +36,9 @@ const overloadConsole = ({
   })
 }
 
+/**
+ * 禁止控制台打印，这里直接用空函数代替原来的 console 的 method
+ */
 export const disabledConsoleOutput = () => {
   overloadConsole({
     methods: ['log', 'warn', 'info'],
@@ -31,7 +46,11 @@ export const disabledConsoleOutput = () => {
   })
 }
 
+/**
+ * 让控制台变颜色
+ */
 export const makeConsoleColored = () => {
+  // 重写 console 方法
   overloadConsole({
     methods: ['log', 'warn', 'error', 'info'],
     output: ({ method, args, oldMethods }) => {

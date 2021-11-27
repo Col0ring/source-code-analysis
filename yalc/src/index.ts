@@ -3,9 +3,16 @@ import * as fs from 'fs-extra'
 import { homedir } from 'os'
 import { join } from 'path'
 
+/**
+ * 用户根目录，用于后续存储
+ */
 const userHome = homedir()
 
+/**
+ * 与 yalc 相关的 config
+ */
 export const values = {
+  // 命令名
   myNameIs: 'yalc',
   // 忽略文件
   ignoreFileName: '.yalcignore',
