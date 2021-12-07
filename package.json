@@ -1,0 +1,6 @@
+{
+  "name": "source-code-analysis",
+  "scripts": {
+    "commit": "git add . && git commit -n -m"
+  }
+}
