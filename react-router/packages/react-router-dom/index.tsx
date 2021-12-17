@@ -3,7 +3,7 @@
  */
 // 引入 history 库（针对浏览器中的路由系统），并且暴露 react-router 中的相关方法
 import * as React from "react";
-import type { BrowserHistory, HashHistory } from "history";
+import type { BrowserHistory, HashHistory, History } from "history";
 import { createBrowserHistory, createHashHistory, createPath } from "history";
 import {
   MemoryRouter,
@@ -27,7 +27,8 @@ import {
   useOutlet,
   useParams,
   useResolvedPath,
-  useRoutes
+  useRoutes,
+  useOutletContext
 } from "react-router";
 import type { To } from "react-router";
 
@@ -75,7 +76,8 @@ export {
   useOutlet,
   useParams,
   useResolvedPath,
-  useRoutes
+  useRoutes,
+  useOutletContext
 };
 
 export type {
@@ -204,6 +206,45 @@ export function HashRouter({ basename, children, window }: HashRouterProps) {
   );
 }
 
+export interface HistoryRouterProps {
+  basename?: string;
+  children?: React.ReactNode;
+  history: History;
+}
+
+/**
+ * 主要用于用户提供自定义的 history 对象，否则只能引用 react-router 包中的 Router 组件手动传入
+ * 同时这边告诉我们尽量不要使用自己的 history 对象，否则可能会与 react-router 内部版本不一致
+ * A `<Router>` that accepts a pre-instantiated history object. It's important
+ * to note that using your own history object is highly discouraged and may add
+ * two versions of the history library to your bundles unless you use the same
+ * version of the history library that React Router uses internally.
+ */
+function HistoryRouter({ basename, children, history }: HistoryRouterProps) {
+  const [state, setState] = React.useState({
+    action: history.action,
+    location: history.location
+  });
+
+  React.useLayoutEffect(() => history.listen(setState), [history]);
+
+  return (
+    <Router
+      basename={basename}
+      children={children}
+      location={state.location}
+      navigationType={state.action}
+      navigator={history}
+    />
+  );
+}
+
+if (__DEV__) {
+  HistoryRouter.displayName = "unstable_HistoryRouter";
+}
+
+export { HistoryRouter as unstable_HistoryRouter };
+
 /**
  * 用户是否有按下修辞符
  * @param event
@@ -263,7 +304,12 @@ if (__DEV__) {
   Link.displayName = "Link";
 }
 
-export interface NavLinkProps extends Omit<LinkProps, "className" | "style"> {
+export interface NavLinkProps
+  extends Omit<LinkProps, "className" | "style" | "children"> {
+  // children 可直接传入函数
+  children:
+    | React.ReactNode
+    | ((props: { isActive: boolean }) => React.ReactNode);
   /**
    * 这里的 caseSensitive 是改变传入的 to 的 pathname 的大小写，主要用于 active 状态的计算
    */
@@ -289,6 +335,7 @@ export const NavLink = React.forwardRef<HTMLAnchorElement, NavLinkProps>(
       end = false,
       style: styleProp,
       to,
+      children,
       ...rest
     },
     ref
@@ -339,7 +386,9 @@ export const NavLink = React.forwardRef<HTMLAnchorElement, NavLinkProps>(
         ref={ref}
         style={style}
         to={to}
-      />
+      >
+        {typeof children === "function" ? children({ isActive }) : children}
+      </Link>
     );
   }
 );

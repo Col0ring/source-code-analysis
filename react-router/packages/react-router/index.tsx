@@ -58,17 +58,14 @@ function warningOnce(key: string, cond: boolean, message: string) {
 
 /**
  * A Navigator is a "location changer"; it's how you get to different locations.
- *
+ * 其实可以看作 history，因为可以直接传入传入它，但是这里本质是要我们传入一些导航函数就行
  * Every history instance conforms to the Navigator interface, but the
  * distinction is useful primarily when it comes to the low-level <Router> API
  * where both the location and a navigator must be provided separately in order
  * to avoid "tearing" that may occur in a suspense-enabled app if the action
  * and/or location were to be read directly from the history instance.
  */
-export type Navigator = Omit<
-  History,
-  "action" | "location" | "back" | "forward" | "listen" | "block"
->;
+export type Navigator = Pick<History, "go" | "push" | "replace" | "createHref">;
 
 interface NavigationContextObject {
   basename: string;
@@ -201,15 +198,18 @@ export function Navigate({ to, replace, state }: NavigateProps): null {
   return null;
 }
 
-export interface OutletProps {}
+export interface OutletProps {
+  // 可以传入要提供给 outlet 内部元素的上下文信息
+  context?: unknown;
+}
 
 /**
  * Renders the child route's element, if there is one.
  * 就是获取 context 上当前的 outlet
  * @see https://reactrouter.com/docs/en/v6/api#outlet
  */
-export function Outlet(_props: OutletProps): React.ReactElement | null {
-  return useOutlet();
+export function Outlet(props: OutletProps): React.ReactElement | null {
+  return useOutlet(props.context);
 }
 
 export interface RouteProps {
@@ -440,6 +440,64 @@ export function useLocation(): Location {
 }
 
 /**
+ * 如果参数解析失败的状态
+ */
+type ParamParseFailed = { failed: true };
+
+/**
+ * 这里就是类型编程了，主要是解析 params 中的具体参数，比如解析出 /:a 中的 a，拿到后单独提出来
+ * ParamParseSegment<'/:a/:b'> => 'a' | 'b'
+ */
+type ParamParseSegment<Segment extends string> =
+  // 递归查左右是否有 :id 这样的存在
+  // Check here if there exists a forward slash in the string.
+  Segment extends `${infer LeftSegment}/${infer RightSegment}`
+    ? // If there is a forward slash, then attempt to parse each side of the
+      // forward slash.
+      ParamParseSegment<LeftSegment> extends infer LeftResult
+      ? ParamParseSegment<RightSegment> extends infer RightResult
+        ? LeftResult extends string
+          ? // If the left side is successfully parsed as a param, then check if
+            // the right side can be successfully parsed as well. If both sides
+            // can be parsed, then the result is a union of the two sides
+            // (read: "foo" | "bar").
+            RightResult extends string
+            ? LeftResult | RightResult
+            : LeftResult
+          : // If the left side is not successfully parsed as a param, then check
+          // if only the right side can be successfully parse as a param. If it
+          // can, then the result is just right, else it's a failure.
+          RightResult extends string
+          ? RightResult
+          : ParamParseFailed
+        : ParamParseFailed
+      : // If the left side didn't parse into a param, then just check the right
+      // side.
+      ParamParseSegment<RightSegment> extends infer RightResult
+      ? RightResult extends string
+        ? RightResult
+        : ParamParseFailed
+      : ParamParseFailed
+    : // If there's no forward slash, then check if this segment starts with a
+    // colon. If it does, then this is a dynamic segment, so the result is
+    // just the remainder of the string. Otherwise, it's a failure.
+    Segment extends `:${infer Remaining}`
+    ? Remaining
+    : ParamParseFailed;
+
+// Attempt to parse the given string segment. If it fails, then just return the
+// plain string type as a default fallback. Otherwise return the union of the
+// parsed string literals that were referenced as dynamic segments in the route.
+/**
+ * 解析给定的字符串类型，失败就返回 string 类型，否则返回在字符串中动态引用的数值类型
+ */
+type ParamParseKey<Segment extends string> =
+  ParamParseSegment<Segment> extends string
+    ? ParamParseSegment<Segment>
+    : string;
+
+/**
+ * 获取当前的跳转 type
  * Returns the current navigation action which describes how the router came to
  * the current location, either by a pop, push, or replace on the history stack.
  * 当前的 action type
@@ -456,9 +514,10 @@ export function useNavigationType(): NavigationType {
  * 查询指定路由是否能匹配上当前的 pathname
  * @see https://reactrouter.com/docs/en/v6/api#usematch
  */
-export function useMatch<ParamKey extends string = string>(
-  pattern: PathPattern | string
-): PathMatch<ParamKey> | null {
+export function useMatch<
+  ParamKey extends ParamParseKey<Path>,
+  Path extends string
+>(pattern: PathPattern<Path> | Path): PathMatch<ParamKey> | null {
   invariant(
     useInRouterContext(),
     // TODO: This error is probably because they somehow have 2 versions of the
@@ -466,7 +525,11 @@ export function useMatch<ParamKey extends string = string>(
     `useMatch() may be used only in the context of a <Router> component.`
   );
 
-  return matchPath(pattern, useLocation().pathname);
+  let { pathname } = useLocation();
+  return React.useMemo(
+    () => matchPath<ParamKey, Path>(pattern, pathname),
+    [pathname, pattern]
+  );
 }
 
 /**
@@ -512,7 +575,7 @@ export function useNavigate(): NavigateFunction {
   });
 
   let navigate: NavigateFunction = React.useCallback(
-    (to: To | number, options: { replace?: boolean; state?: any } = {}) => {
+    (to: To | number, options: NavigateOptions = {}) => {
       warning(
         activeRef.current,
         `You should call navigate() in a React.useEffect(), not when ` +
@@ -549,14 +612,29 @@ export function useNavigate(): NavigateFunction {
   return navigate;
 }
 
+const OutletContext = React.createContext<unknown>(null);
+
+/**
+ * 可以在嵌套的 routes 中使用，这里的上下文信息是用户在使用 <Outlet /> 或者 useOutlet 传入的
+ * Returns the context (if provided) for the child route at this level of the route
+ * hierarchy.
+ * @see https://reactrouter.com/docs/en/v6/api#useoutletcontext
+ */
+export function useOutletContext<Context = unknown>(): Context {
+  return React.useContext(OutletContext) as Context;
+}
+
 /**
  * Returns the element for the child route at this level of the route
  * hierarchy. Used internally by <Outlet> to render child routes.
- * 拿到当前的 outlet
+ * 拿到当前的 outlet，这里可以直接听过要给 outlet 的上下文信息
  * @see https://reactrouter.com/docs/en/v6/api#useoutlet
  */
-export function useOutlet(): React.ReactElement | null {
-  return React.useContext(RouteContext).outlet;
+export function useOutlet(context?: unknown): React.ReactElement | null {
+  let outlet = React.useContext(RouteContext).outlet;
+  return (
+    <OutletContext.Provider value={context}>{outlet}</OutletContext.Provider>
+  );
 }
 
 /**
@@ -565,8 +643,11 @@ export function useOutlet(): React.ReactElement | null {
  * 拿到当前匹配到的所有 params
  * @see https://reactrouter.com/docs/en/v6/api#useparams
  */
-export function useParams<Key extends string = string>(): Readonly<
-  Params<Key>
+export function useParams<
+  ParamsOrKey extends string | Record<string, string | undefined> = string
+>(): Readonly<
+  // 如果传入的是 string 的联合类型，代表是必选项，一定会有对应的参数，如果传入对象类型就是可选项
+  [ParamsOrKey] extends [string] ? Params<ParamsOrKey> : Partial<ParamsOrKey>
 > {
   let { matches } = React.useContext(RouteContext);
   let routeMatch = matches[matches.length - 1];
@@ -657,7 +738,7 @@ export function useRoutes(
         `deeper, the parent won't match anymore and therefore the child ` +
         `routes will never render.\n\n` +
         `Please change the parent <Route path="${parentPath}"> to <Route ` +
-        `path="${parentPath}/*">.`
+        `path="${parentPath === "/" ? "*" : `${parentPath}/*`}">.`
     );
   }
 
@@ -877,7 +958,7 @@ export function matchRoutes(
   // branches 中有一个匹配到了就终止循环，或者全都没有匹配到
   for (let i = 0; matches == null && i < branches.length; ++i) {
     // 遍历扁平化的 routes，查看每个 branch 的路径匹配规则
-    matches = matchRouteBranch(branches[i], routes, pathname);
+    matches = matchRouteBranch(branches[i], pathname);
   }
 
   return matches;
@@ -893,6 +974,7 @@ interface RouteMeta {
    * 用户在 routes 数组中的索引位置（相对其兄弟 route 而言）
    */
   childrenIndex: number;
+  route: RouteObject;
 }
 
 interface RouteBranch {
@@ -931,7 +1013,9 @@ function flattenRoutes(
       relativePath: route.path || "",
       caseSensitive: route.caseSensitive === true,
       // index 是用户给出的 routes 顺序，会一定程度影响 branch 的排序（当为同一层级 route 时）
-      childrenIndex: index
+      childrenIndex: index,
+      // 当前 route
+      route
     };
 
     // 如果 route 以 / 开头，那么它应该完全包含父 route 的 path
@@ -1083,13 +1167,8 @@ function compareIndexes(a: number[], b: number[]): number {
  */
 function matchRouteBranch<ParamKey extends string = string>(
   branch: RouteBranch,
-  // 这里后续貌似会更改，将这个参数放到 branch 的 routesMeta 中
-  // TODO: attach original route object inside routesMeta so we don't need this arg
-  routesArg: RouteObject[],
-  // 这里的 pathname 已经处理过 base 了，所以当做是普通的 pathname
   pathname: string
 ): RouteMatch<ParamKey>[] | null {
-  let routes = routesArg;
   let { routesMeta } = branch;
 
   // 初始化匹配到的值
@@ -1119,8 +1198,7 @@ function matchRouteBranch<ParamKey extends string = string>(
     // 匹配上了合并 params，注意这里是改变的 matchedParams，所以所有 route 的 params 都是同一个
     Object.assign(matchedParams, match.params);
 
-    // childrenIndex 和 route 的 index 一定是一一对应的，只有 branch 数量可能对应不上
-    let route = routes[meta.childrenIndex];
+    let route = meta.route;
 
     // 匹配上了就把路径再补全
     matches.push({
@@ -1134,9 +1212,6 @@ function matchRouteBranch<ParamKey extends string = string>(
     if (match.pathnameBase !== "/") {
       matchedPathname = joinPaths([matchedPathname, match.pathnameBase]);
     }
-
-    // routes 更新为所有子 route
-    routes = route.children!;
   }
 
   return matches;
@@ -1186,13 +1261,14 @@ function _renderMatches(
 /**
  * A PathPattern is used to match on some portion of a URL pathname.
  */
-export interface PathPattern {
+export interface PathPattern<Path extends string = string> {
   /**
+   * Path 可以不是 string，可以是具体的路径，因为 ts 可以直接解析出对应参数
    * A string to match against a URL pathname. May contain `:id`-style segments
    * to indicate placeholders for dynamic parameters. May also end with `/*` to
    * indicate matching the rest of the URL pathname.
    */
-  path: string;
+  path: Path;
   /**
    * Should be `true` if the static portions of the `path` should be matched in
    * the same case.
@@ -1236,8 +1312,11 @@ type Mutable<T> = {
  * 判断 pathname 是否匹配传入的 pattern，如果不匹配返回 null，如果匹配就返回进过解析后的值
  * @see https://reactrouter.com/docs/en/v6/api#matchpath
  */
-export function matchPath<ParamKey extends string = string>(
-  pattern: PathPattern | string,
+export function matchPath<
+  ParamKey extends ParamParseKey<Path>,
+  Path extends string
+>(
+  pattern: PathPattern<Path> | Path,
   pathname: string
 ): PathMatch<ParamKey> | null {
   if (typeof pattern === "string") {
@@ -1350,12 +1429,12 @@ function compilePath(
     // 如果最后没有以 * 结尾，则只是忽略末尾的 /，否则我们应该至少匹配到一个单次边界（兼容 end 为 true 的情况，还有更多其他的情况，比如 /home/ /home@，也就是匹配到的单词后的字符不能是 a-z、A-Z、0-9）
     regexpSource += end
       ? "\\/*$" // When matching to the end, ignore trailing slashes
-      : // Otherwise, at least match a word boundary. This restricts parent
-        // routes to matching only their own words and nothing more, e.g. parent
+      : // Otherwise, match a word boundary or a proceeding /. The word boundary restricts
+        // parent routes to matching only their own words and nothing more, e.g. parent
         // route "/home" should not match "/home2".
         // 限制了父 routes 只能匹配到自己的单词，如果为 false，那么 /home 可以匹配 /home/home2，但是不能匹配 /home2，也就是说必须要只有 /home，或者有 /home/ 作为前缀
         // 匹配到单词边界
-        "(?:\\b|$)";
+        "(?:\\b|\\/|$)";
   }
 
   // path => pattern
