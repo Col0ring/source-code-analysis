@@ -3,7 +3,7 @@
 /**
  * Actions represent the type of change to a location value.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#action
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#action
  */
 // 浏览器行为枚举，浏览器第一次打开时状态都为 pop
 export enum Action {
@@ -33,21 +33,21 @@ export enum Action {
 /**
  * A URL pathname, beginning with a /.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.pathname
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.pathname
  */
 export type Pathname = string;
 
 /**
  * A URL search string, beginning with a ?.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.search
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.search
  */
 export type Search = string;
 
 /**
  * A URL fragment identifier, beginning with a #.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.hash
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.hash
  */
 export type Hash = string;
 
@@ -55,15 +55,16 @@ export type Hash = string;
  * An object that is used to associate some arbitrary data with a location, but
  * that does not appear in the URL path.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.state
+ * @deprecated
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.state
  */
-export type State = object | null;
+export type State = unknown;
 
 /**
  * A unique string associated with a location. May be used to safely store
  * and retrieve data in some other storage API, like `localStorage`.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.key
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.key
  */
 export type Key = string;
 
@@ -74,21 +75,21 @@ export interface Path {
   /**
    * A URL pathname, beginning with a /.
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.pathname
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.pathname
    */
   pathname: Pathname;
 
   /**
    * A URL search string, beginning with a ?.
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.search
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.search
    */
   search: Search;
 
   /**
    * A URL fragment identifier, beginning with a #.
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.hash
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.hash
    */
   hash: Hash;
 }
@@ -97,15 +98,15 @@ export interface Path {
  * An entry in a history stack. A location contains information about the
  * URL path, as well as possibly some arbitrary state and a key.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location
  */
 export interface Location extends Path {
   /**
    * A value of arbitrary data associated with this location.
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.state
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.state
    */
-  state: any;
+  state: unknown;
 
   /**
    * A unique string associated with this location. May be used to safely store
@@ -113,18 +114,22 @@ export interface Location extends Path {
    *
    * Note: This value is always "default" on the initial location.
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#location.key
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#location.key
    */
   key: Key;
 }
 
 /**
  * A partial Path object that may be missing some properties.
+ *
+ * @deprecated
  */
 export type PartialPath = Partial<Path>;
 
 /**
  * A partial Location object that may be missing some properties.
+ *
+ * @deprecated
  */
 export type PartialLocation = Partial<Location>;
 
@@ -177,7 +182,7 @@ export interface Blocker {
  * `history.push` or `history.replace`. May be either a URL or the pieces of a
  * URL path.
  */
-export type To = string | PartialPath;
+export type To = string | Partial<Path>;
 
 /**
  * A history is an interface to the navigation stack. The history serves as the
@@ -193,7 +198,7 @@ export interface History {
    * The last action that modified the current location. This will always be
    * Actin
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.action
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.action
    */
   // 最后一次浏览器跳转的行为，可变
   readonly action: Action;
@@ -201,7 +206,7 @@ export interface History {
   /**
    * The current location. This value is mutable.
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.location
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.location
    */
   // 挂载有当前的 location 可变
   readonly location: Location;
@@ -212,7 +217,7 @@ export interface History {
    *
    * @param to - The destination URL
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.createHref
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.createHref
    */
   // 工具方法，把 to 对象转化为 url 字符串
   createHref(to: To): string;
@@ -225,7 +230,7 @@ export interface History {
    * @param to - The new URL
    * @param state - Data to associate with the new location
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.push
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.push
    */
   push(to: To, state?: any): void;
 
@@ -236,7 +241,7 @@ export interface History {
    * @param to - The new URL
    * @param state - Data to associate with the new location
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.replace
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.replace
    */
   replace(to: To, state?: any): void;
 
@@ -246,7 +251,7 @@ export interface History {
    *
    * @param delta - The delta in the stack index
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.go
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.go
    */
   go(delta: number): void;
 
@@ -256,14 +261,14 @@ export interface History {
    * Warning: if the current location is the first location in the stack, this
    * will unload the current document.
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.back
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.back
    */
   back(): void;
 
   /**
    * Navigates to the next entry in the stack. Identical to go(1).
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.forward
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.forward
    */
   forward(): void;
 
@@ -274,7 +279,7 @@ export interface History {
    * @param listener - A function that will be called when the location changes
    * @returns unlisten - A function that may be used to stop listening
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.listen
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.listen
    */
   listen(listener: Listener): () => void;
 
@@ -285,7 +290,7 @@ export interface History {
    * @param blocker - A function that will be called when a transition is blocked
    * @returns unblock - A function that may be used to stop blocking
    *
-   * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#history.block
+   * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#history.block
    */
   block(blocker: Blocker): () => void;
 }
@@ -295,7 +300,7 @@ export interface History {
  * browser environment. This is the standard for most web apps and provides the
  * cleanest URLs the browser's address bar.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#browserhistory
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#browserhistory
  */
 export interface BrowserHistory extends History {}
 
@@ -308,7 +313,7 @@ export interface BrowserHistory extends History {}
  * shared hosting environments that do not provide fine-grained controls over
  * which pages are served at which URLs.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#hashhistory
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#hashhistory
  */
 export interface HashHistory extends History {}
 
@@ -317,21 +322,21 @@ export interface HashHistory extends History {}
  * environments where there is no web browser, such as node tests or React
  * Native.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#memoryhistory
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#memoryhistory
  */
 // 保存在内存中的 history，全环境通用，也就是自定义的历史栈
 export interface MemoryHistory extends History {
-  index: number;
+  readonly index: number;
 }
 
 /**
  * 冻结对象，但是只在开发模式下触发
  */
-const readOnly: <T extends unknown>(obj: T) => T = __DEV__
+const readOnly: <T>(obj: T) => Readonly<T> = __DEV__
   ? (obj) => Object.freeze(obj)
   : (obj) => obj;
 
-function warning(cond: boolean, message: string) {
+function warning(cond: any, message: string) {
   if (!cond) {
     // eslint-disable-next-line no-console
     if (typeof console !== 'undefined') console.warn(message);
@@ -370,7 +375,7 @@ export type BrowserHistoryOptions = { window?: Window };
  * most web apps, but it requires some configuration on the server to ensure you
  * serve the same app at multiple URLs.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#createbrowserhistory
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#createbrowserhistory
  */
 export function createBrowserHistory(
   options: BrowserHistoryOptions = {}
@@ -642,7 +647,7 @@ export type HashHistoryOptions = { window?: Window };
  * some reason, either because you do cannot configure it or the URL space is
  * reserved for something else.
  *
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#createhashhistory
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#createhashhistory
  */
 export function createHashHistory(
   options: HashHistoryOptions = {}
@@ -910,7 +915,7 @@ export function createHashHistory(
  * A user-supplied object that describes a location. Used when providing
  * entries to `createMemoryHistory` via its `initialEntries` option.
  */
-export type InitialEntry = string | PartialLocation;
+export type InitialEntry = string | Partial<Location>;
 
 export type MemoryHistoryOptions = {
   // 初始化的用户栈，默认浏览器的历史栈
@@ -923,7 +928,7 @@ export type MemoryHistoryOptions = {
  * Memory history stores the current location in memory. It is designed for use
  * in stateful non-browser environments like tests and React Native.
  * 特殊的路由，通过内存存储页面栈，这里传入的参数也和 browser 和 hash router 不同，因为不是真实的路由，所以不需要 window 对象
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#creatememoryhistory
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#creatememoryhistory
  */
 export function createMemoryHistory(
   options: MemoryHistoryOptions = {}
@@ -1142,23 +1147,27 @@ function createKey() {
 /**
  * Creates a string URL path from the given pathname, search, and hash components.
  *  pathname + search + hash 创建完整 url
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#createpath
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#createpath
  */
 export function createPath({
   pathname = '/',
   search = '',
   hash = ''
-}: PartialPath) {
-  return pathname + search + hash;
+}: Partial<Path>) {
+  if (search && search !== '?')
+    pathname += search.charAt(0) === '?' ? search : '?' + search;
+  if (hash && hash !== '#')
+    pathname += hash.charAt(0) === '#' ? hash : '#' + hash;
+  return pathname;
 }
 
 /**
  * Parses a string URL path into its separate pathname, search, and hash components.
  * 解析 url
- * @see https://github.com/ReactTraining/history/tree/master/docs/api-reference.md#parsepath
+ * @see https://github.com/remix-run/history/tree/main/docs/api-reference.md#parsepath
  */
-export function parsePath(path: string): PartialPath {
-  let parsedPath: PartialPath = {};
+export function parsePath(path: string): Partial<Path> {
+  let parsedPath: Partial<Path> = {};
 
   if (path) {
     let hashIndex = path.indexOf('#');
