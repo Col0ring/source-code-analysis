@@ -246,7 +246,7 @@ export interface IndexRouteProps {
 export function Route(
   _props: PathRouteProps | LayoutRouteProps | IndexRouteProps
 ): React.ReactElement | null {
-  // 这里可以看出 Route 不能够被渲染出来，证明 Router 拿到 Route 后也不会再内部操作
+  // 这里可以看出 Route 不能够被渲染出来，证明 Router 拿到 Route 后也不会在内部操作
   invariant(
     false,
     `A <Route> is only ever to be used as the child of <Routes> element, ` +
@@ -1612,7 +1612,7 @@ function stripBasename(pathname: string, basename: string): string | null {
     return null;
   }
 
-  // 如果 basename 不是 /，证明有值，比如 /foo/，这里要验证最后一个字符是否为 /，不是 / 则返回 null
+  // 上面只验证了是否 pathname 包含 basename，这里还需要验证包含 basename 后第一个字母是否为 /，不为 / 证明并不是该 basename 下的路径，返回 null
   let nextChar = pathname.charAt(basename.length);
   if (nextChar && nextChar !== "/") {
     // pathname does not start with basename/
