@@ -1,6 +1,6 @@
 /**
  * 总结：最重要的 api 是 useRoutes，Route 组件实际上只是提供 route 属性的工具而已，Routes 组件实际上内部只是对 useRoutes 的参数做一层转换，转换完成后可以得到一个 routes 数组（也可以直接使用 useRoutes 手动传入）。
- * useRoutes 内部会将传入的 routes 与当前的 location（可手动传入，但内部会做校验）做一层匹配，通过对 route 中声明的 path 的权重计算（在 route 中加入 index 属性实际上是为了增加权重，但是该权重并不大，如果有确定的路由路径就不会匹配上 indexRoute），拿到当前 pathname 所能匹配到的最佳 matches 数组，该数组为扁平化，索引从小到大级别关系从大到小，最大是根 route 所对应的 match，最小是当前 pathname 匹配最多的 route 所对应的 match。
+ * useRoutes 内部会将传入的 routes 与当前的 location（可手动传入，但内部会做校验）做一层匹配，通过对 route 中声明的 path 的权重计算，拿到当前 pathname 所能匹配到的最佳 matches 数组，索引从小到大层数关系从外到内
  * 然后将 matches 数组渲染为一个聚合的 React Element，该元素整体是许多 RouteContext.Provider 的嵌套，从外到内依次是父 => 子 => 孙子这样的关系，每个 Provider 包含两个值，与该级别对应的 matches 数组（最后的元素时该级别的 route 自身）与 outlet 元素，outlet 元素就是嵌套的 RouteContext.Provider 存放的地方，每个 RouteContext.Provider 的 children 就是 route 的 element 属性。
  * 每次使用 outlet 实际上都是渲染的内置的路由关系（如果当前 route 没有 element 属性，则默认渲染 outlet，这也是为什么可以直接 <Route/> 组件嵌套的原因），我们可以在当前级别 route 的 element 中任意地方使用 outlet 来渲染子路由。
  */
@@ -411,7 +411,7 @@ export function useHref(to: To): string {
 
 /**
  * Returns true if this component is a descendant of a <Router>.
- * 判断当前 Router 是否在另一个 Router 中
+ * 判断当前组件是否在一个 Router 中
  * @see https://reactrouter.com/docs/en/v6/api#useinroutercontext
  */
 export function useInRouterContext(): boolean {
@@ -445,11 +445,11 @@ export function useLocation(): Location {
 type ParamParseFailed = { failed: true };
 
 /**
- * 这里就是类型编程了，主要是解析 params 中的具体参数，比如解析出 /:a 中的 a，拿到后单独提出来
+ * 这里就是类型体操了，主要是解析 params 中的具体参数，比如解析出 /:a 中的 a，拿到后单独提出来
  * ParamParseSegment<'/:a/:b'> => 'a' | 'b'
  */
 type ParamParseSegment<Segment extends string> =
-  // 递归查左右是否有 :id 这样的存在
+  // 递归查左右是否有 :id 这样的路径存在
   // Check here if there exists a forward slash in the string.
   Segment extends `${infer LeftSegment}/${infer RightSegment}`
     ? // If there is a forward slash, then attempt to parse each side of the
@@ -489,7 +489,7 @@ type ParamParseSegment<Segment extends string> =
 // plain string type as a default fallback. Otherwise return the union of the
 // parsed string literals that were referenced as dynamic segments in the route.
 /**
- * 解析给定的字符串类型，失败就返回 string 类型，否则返回在字符串中动态引用的数值类型
+ * 解析给定的字符串类型，失败就返回 string 类型，否则返回在字符串中动态引用部分的联合类型
  */
 type ParamParseKey<Segment extends string> =
   ParamParseSegment<Segment> extends string
@@ -615,7 +615,7 @@ export function useNavigate(): NavigateFunction {
 const OutletContext = React.createContext<unknown>(null);
 
 /**
- * 可以在嵌套的 routes 中使用，这里的上下文信息是用户在使用 <Outlet /> 或者 useOutlet 传入的
+ * 可以在嵌套的 routes 中使用，这里的上下文信息是用户在使用 <Outlet /> 或者 useOutlet 时传入的
  * Returns the context (if provided) for the child route at this level of the route
  * hierarchy.
  * @see https://reactrouter.com/docs/en/v6/api#useoutletcontext
@@ -627,7 +627,7 @@ export function useOutletContext<Context = unknown>(): Context {
 /**
  * Returns the element for the child route at this level of the route
  * hierarchy. Used internally by <Outlet> to render child routes.
- * 拿到当前的 outlet，这里可以直接听过要给 outlet 的上下文信息
+ * 拿到当前的 outlet，这里可以传入 outlet 的上下文信息
  * @see https://reactrouter.com/docs/en/v6/api#useoutlet
  */
 export function useOutlet(context?: unknown): React.ReactElement | null {
@@ -691,6 +691,7 @@ export function useRoutes(
   routes: RouteObject[],
   locationArg?: Partial<Location> | string
 ): React.ReactElement | null {
+  // useRoutes 必须最外层有 Router 包裹，不然报错
   invariant(
     useInRouterContext(),
     // TODO: This error is probably because they somehow have 2 versions of the
@@ -698,7 +699,8 @@ export function useRoutes(
     `useRoutes() may be used only in the context of a <Router> component.`
   );
 
-  // 当该 hooks 在一个已经调用了 useRoutes 的渲染对象中渲染时，matches 或有值，也就是 Routes 的嵌套
+  // 1.当此 useRoutes 为第一层级的路由定义时，matches 为空数组（默认值）
+  // 2.当该 hooks 在一个已经调用了 useRoutes 的渲染环境中渲染时，matches 含有值（也就是有 Routes 的上下文环境嵌套）
   let { matches: parentMatches } = React.useContext(RouteContext);
   // 最后 match 到的 route（深度最深），该 route 将作为父 route，我们后续的 routes 都是其子级
   let routeMatch = parentMatches[parentMatches.length - 1];
@@ -1036,7 +1038,7 @@ function flattenRoutes(
 
     // 完整的 path
     let path = joinPaths([parentPath, meta.relativePath]);
-    // 将自己的 meta 进行推入
+    // 将自己的 meta 推入
     let routesMeta = parentsMeta.concat(meta);
 
     // Add the children before adding this route to the array so we traverse the
@@ -1128,7 +1130,7 @@ function computeScore(path: string, index: boolean | undefined): number {
           ? // 动态参数权重 3
             dynamicSegmentValue
           : segment === ""
-          ? // 空值权重为 1，也就是两个 // 连着中间会多 1 的权重
+          ? // 空值权重为 1，这个其实只有一种情况，path 最后面多一个 /，比如 /foo 与 /foo/ 的区别
             emptySegmentValue
           : // 静态值权重最高为 10
             staticSegmentValue),
@@ -1145,7 +1147,7 @@ function computeScore(path: string, index: boolean | undefined): number {
 function compareIndexes(a: number[], b: number[]): number {
   // 是否为兄弟 route
   let siblings =
-    // 这里是比较除了最后一个 route 的 path，需要全部一致才是兄弟 route
+    // 这里是比较除了最后一个 route 的 index 值，需要全部一致才是兄弟 route
     a.length === b.length && a.slice(0, -1).every((n, i) => n === b[i]);
 
   return siblings
@@ -1153,7 +1155,7 @@ function compareIndexes(a: number[], b: number[]): number {
       // first. This allows people to have fine-grained control over the matching
       // behavior by simply putting routes with identical paths in the order they
       // want them tried.
-      // 如果是兄弟节点，判断 route 的 index（可手动传入控制），否则简单按照索引顺序比较
+      // 如果是兄弟节点，按照传入的顺序排序 a.length - 1 和 b.length - 1 是相等的，只是内部的值不同
       a[a.length - 1] - b[b.length - 1]
     : // Otherwise, it doesn't really make sense to rank non-siblings by index,
       // so they sort equally.
@@ -1239,7 +1241,7 @@ function _renderMatches(
 ): React.ReactElement | null {
   if (matches == null) return null;
 
-  // 生成 outlet 组件，主要这里是从后往前 reduce，所有最前面的是最外层
+  // 生成 outlet 组件，注意这里是从后往前 reduce，所以最前面的是最外层
   /**
    *  可以看到 outlet 是通过不断递归生成的组件，最外层的 outlet 递归层数最多，包含有所有的内层组件，
    *  所以我们在外层使用的 <Outlet /> 是包含有所有子组件的聚合组件
@@ -1381,7 +1383,7 @@ export function matchPath<
 
 /**
  * 解析 path，会将 path => 对应的 RegExp，同时解析出 path 的所有 params
- * 可以再这里面看到没有处理 /about/*\//1 这样的路径，所以这样的路径不会对 * 做处理，需要直接访问 /about/*\//1
+ * 可以在这里看到没有处理 /about/*\//1 这样的路径，所以这样的路径不会对 * 做处理，需要直接访问 /about/*\//1
  * @param path
  * @param caseSensitive 是否兼容大小写不一致
  * @param end 是否匹配末尾的 /
@@ -1479,6 +1481,7 @@ export function resolvePath(to: To, fromPathname = "/"): Path {
     hash = ""
   } = typeof to === "string" ? parsePath(to) : to;
 
+  // 通过 to 不是相对路径，直接使用，如果是相对路径，处理相对路径
   let pathname = toPathname
     ? toPathname.startsWith("/")
       ? toPathname
@@ -1506,7 +1509,7 @@ function resolvePathname(relativePath: string, fromPathname: string): string {
   // 这时的 relativePath 并不是以 / 开头的
   let relativeSegments = relativePath.split("/");
 
-  // 这段代码就是解析路径，将 .. 和 . 这些与父级目录想比较，然后解析成绝对路径
+  // 这段代码就是解析路径，将 .. 和 . 这些与父级目录相比较，然后解析成绝对路径
   relativeSegments.forEach(segment => {
     if (segment === "..") {
       // Keep the root "" segment so the pathname starts at /
@@ -1535,6 +1538,7 @@ function resolveTo(
   locationPathname: string
 ): Path {
   let to = typeof toArg === "string" ? parsePath(toArg) : toArg;
+  // 如果 to 没有提供路径名，比如仅仅是改变 search 字符串，返回 /
   let toPathname = toArg === "" || to.pathname === "" ? "/" : to.pathname;
 
   // If a pathname is explicitly provided in `to`, it should be relative to the
@@ -1544,10 +1548,17 @@ function resolveTo(
   // `to` values that do not provide a pathname. `to` can simply be a search or
   // hash string, in which case we should assume that the navigation is relative
   // to the current location's pathname and *not* the route pathname.
+  // 从哪个路由导航，主要是为了处理相对路径关系
   let from: string;
+  // 没有提供 to，from 就是当前路径
   if (toPathname == null) {
     from = locationPathname;
   } else {
+    // 提供了 to，要去除掉 .. 找到 from，然后把 to 的 .. 消
+    // 注意这里的 routePathnames 在外部是通过 matches 映射来的，它的最后一段路由是调用 useNavigate 的路由，而不是 pathname 的最后一段路由
+    /**
+     * eg: 比如当前 pathname 为 /auth/login，我们在 path = /auth 对应的路由下使用了 useNavigate，然后 navigate('..')，此时回到的页面是 /，而不是 /auth
+     */
     let routePathnameIndex = routePathnames.length - 1;
 
     if (toPathname.startsWith("..")) {
@@ -1556,8 +1567,10 @@ function resolveTo(
       // Each leading .. segment means "go up one route" instead of "go up one
       // URL segment".  This is a key difference from how <a href> works and a
       // major reason we call this a "to" value instead of a "href".
+      // to 和 a 标签的 href 是不同的，a 标签的 href 不会解析相对路径
       while (toSegments[0] === "..") {
         toSegments.shift();
+        // 根据 toPathname 的 .. 数量往前回退
         routePathnameIndex -= 1;
       }
 
@@ -1566,9 +1579,11 @@ function resolveTo(
 
     // If there are more ".." segments than parent routes, resolve relative to
     // the root / URL.
+    // 如果 .. 的数量超过了父路由的匹配数量，则默认回到根路径 /
     from = routePathnameIndex >= 0 ? routePathnames[routePathnameIndex] : "/";
   }
 
+  // 注意，此时的 to 只处理了以 .. 开头的情况，还没处理中间有 .. 的情况
   let path = resolvePath(to, from);
 
   // Ensure the pathname has a trailing slash if the original to value had one.
