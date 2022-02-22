@@ -1314,7 +1314,7 @@ type Mutable<T> = {
 /**
  * Performs pattern matching on a URL pathname and returns information about
  * the match.
- * 判断 pathname 是否匹配传入的 pattern，如果不匹配返回 null，如果匹配就返回进过解析后的值
+ * 判断 pathname 是否匹配传入的 pattern，如果不匹配返回 null，如果匹配就返回解析后的值
  * @see https://reactrouter.com/docs/en/v6/api#matchpath
  */
 export function matchPath<
